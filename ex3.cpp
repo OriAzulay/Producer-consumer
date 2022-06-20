@@ -9,6 +9,7 @@
 #include <mutex>
 #include <pthread.h>
 #include <vector>
+#include <semaphore.h>
 
 using namespace std;
 /*global variables:*/
@@ -16,29 +17,39 @@ vector<queue<string>> queueLIst;//queue array
 int N = 10;//queue capacity
 
 // This queue is FIFO : in ->>|4|3|2|1|-->out
-class BoundedQueue:public queue<string>{
+class Bounded_Buffer:public queue<string>{
+	sem_t* Sfull;
+	sem_t* Sempty;
+	
 	mutex m;
 	size_t Qsize;
 	public:
-	BoundedQueue(size_t capacity){
+	Bounded_Buffer(size_t capacity){
 		this->Qsize = capacity;
+		//sem_init(Sfull,0,0);
+		//sem_init(Sempty,0,capacity);
 	}
-	void push(string s){
+	void insert(string s){
+		//sem_wait(Sempty);
 		m.lock();
 		//full
 		if(this->size() != this->Qsize){
-			cout<<"log: push: "<<s<<endl;
 			queue::push(s);
 		m.unlock();
+		//sem_post(Sfull);
 		}
 	}
-	void pop(){
+	string remove(){
+		//sem_wait(Sfull);
 		m.lock();
+		string firstObj = NULL;
 		if(!this->empty()){
-			cout<<"log: pop: "<<this->front()<<endl;
+			firstObj = queue::front();
 			queue::pop();
 		}
 		m.unlock();
+		//sem_post(Sempty);
+		return firstObj;
 	}
 	size_t getSize(){
 		return Qsize;
@@ -53,30 +64,37 @@ struct params
 };
 
 string createNews(int i){
+	string s;
 	switch (i % 3)
 	{
+	case 0:
+		s = " NEWS ";
+		break;
 	case 1:
-		return " NEWS ";
+		s =  " SPORTS ";
 		break;
-	case 2:
-		return " SPORTS ";
-		break;
-	case 3:
-		return " WEATHER ";
+	case 2: 
+		s = " WEATHER ";
 
 	}
-	return NULL;
+	return s;
 }
 
 
 void * producer(void* param){
 	//TODO : create string for Q here
 	params p = *(params*)param;
-	BoundedQueue* q = new BoundedQueue(N);
-	string product = "produce " + to_string(p.id) + createNews(p.id) + to_string(p.numS);
-	//----test
-	q->push(product);
-	//---
+	Bounded_Buffer* q = new Bounded_Buffer(N);
+	p.numS = 3;
+	mutex p_m;
+	for(int i=0; i<p.numS; i++){
+		p_m.lock();
+		string product = "producer " + to_string(p.id) + createNews(p.id) + to_string(i);
+		sleep(0.01);
+		q->insert(product);
+		p_m.unlock();
+	}
+	q->insert("DONE");
 	queueLIst.push_back(*q);
 	return NULL;	
 }
@@ -88,12 +106,16 @@ int main()
 	int N = 10; //size of producers
 	for(int i=0; i<N; i++){
 		params p;
-		p.id = i;
-		p.type;
+		int* a = (int*)malloc(sizeof(int));
+		*a = i;
+		p.id = *a;
 		pthread_t  t;
 		int temp = pthread_create(&t,NULL,producer,&p);
 	}
 	for(int i=0;i<queueLIst.size();i++){
-		cout<<queueLIst[i].front()<<endl;
+		for(int j=0; j<3; j++){
+			cout<<queueLIst[i].front()<<endl;
+		}
+		
 	}
 }
