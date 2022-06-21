@@ -11,11 +11,18 @@
 #include <vector>
 #include <semaphore.h>
 #include <random>
+#include <iterator>
 
 using namespace std;
 /*global variables:*/
 vector<queue<string>> queueLIst;//queue array
-int N = 10;//queue capacity
+int N = 3;//queue capacity
+queue<string> qList[10]; //try
+// |S|N|W|
+//vector<queue<string>> sortedP;
+queue<string> sportQ;
+queue<string> newsQ;
+queue<string> wheaterQ;
 
 // This queue is FIFO : in ->>|4|3|2|1|-->out
 class Bounded_Buffer:public queue<string>{
@@ -80,7 +87,7 @@ string createNews(){
 }
 
 
-void * producer(void* param){
+void* producer(void* param){
 	//TODO : create string for Q here
 	params p = *(params*)param;
 	Bounded_Buffer* q = new Bounded_Buffer(N);
@@ -96,38 +103,90 @@ void * producer(void* param){
 	}
 	q->insert("DONE");
 	queueLIst.push_back(*q);
+	qList[p.id] = *q;
 	return NULL;	
+}
+
+void* dispatcher(void* param){
+	vector<queue<string>> copyQ = queueLIst;
+	while(!copyQ.empty()){
+		vector<queue<string>>::iterator it = copyQ.begin();
+		for(it; it != copyQ.end() ; it++){
+			if(copyQ.empty()){
+				break;
+			}
+			if(!(*it).empty()){
+				switch ((*it).front()[11])
+				{
+				case 'S':
+					sportQ.push((*it).front());
+					//sortedP.at(0).push();
+					cout<<"SPORT Inserted to the 'S dispatcher queue' \n";
+					break;
+				case 'N':
+					newsQ.push((*it).front());
+					//sortedP.at(0).push(it.front());
+					cout<<"NEWS Inserted to the 'N dispatcher queue' \n";
+					break;
+				case 'W':
+					wheaterQ.push((*it).front());
+					//sortedP.at(0).push(it.front());
+					cout<<"WHEATER Inserted to the 'W dispatcher queue' \n";
+					break;
+				default: 
+					break;
+				}
+				(*it).pop();
+			}else{
+				copyQ.erase(it);
+			}
+		}
+	}		
+	cout<<"finally out from dispatchor"<<endl;
+
+	return NULL;
 }
 
 //TODO: to see how insert queue size for each producer
 int main()
 {
 	cout<<"Start"<<endl;
-	int N = 10; //size of producers
 	pthread_t t[N];
+	//--------producers-------------
 	for(int i=0; i<N; i++){
-	// temp queue size generator------
-	random_device r;
-	mt19937 gen(r());
-	uniform_int_distribution<> dist(1,7);
-	//--------------------------------
+	// temp queue size generator--
+		random_device r;
+		mt19937 gen(r());
+		uniform_int_distribution<> dist(1,2);
+	//----------------------------
 		params p;
 		int* a = (int*)malloc(sizeof(int));
 		*a = i;
 		p.id = *a;
 		p.numS = dist(gen);
-		int temp = pthread_create(&t[i],NULL,producer,&p);
+		pthread_create(&t[i],NULL,producer,&p);
 		sleep(0.5);
-		
 	}
+	
+	//-------------------------------
+	//init dispatcher queues:
+	
+	pthread_t dispatch;
+	pthread_create(&dispatch,NULL,dispatcher,NULL);
+
+	pthread_join(dispatch,NULL);
 	for(int k=0; k<N; k++){
 		pthread_join(t[k],NULL);
 	}
+
+
+
+	//
 	for(int i=0;i<N;i++){
 		cout<<queueLIst.at(i).size()<<endl;
 		while(queueLIst.at(i).front() != "DONE"){
-
 			cout<<queueLIst.at(i).front()<<endl;
+
 			queueLIst.at(i).pop();
 		}		
 	}
