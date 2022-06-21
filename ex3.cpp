@@ -17,8 +17,6 @@ using namespace std;
 /*global variables:*/
 vector<queue<string>> queueLIst;//queue array
 int N = 3;//queue capacity
-queue<string> qList[10]; //try
-// |S|N|W|
 //vector<queue<string>> sortedP;
 queue<string> sportQ;
 queue<string> newsQ;
@@ -88,14 +86,12 @@ string createNews(){
 
 
 void* producer(void* param){
-	//TODO : create string for Q here
 	params p = *(params*)param;
 	Bounded_Buffer* q = new Bounded_Buffer(N);
 	mutex p_m;
-	
 	int i;
 	for(i=0; i<p.numS; i++){
-		string s = to_string(i);
+		string s = to_string(i+1);
 		p_m.lock();
 		string product = "producer " + to_string(p.id) + createNews() + s;
 		p_m.unlock();
@@ -103,7 +99,6 @@ void* producer(void* param){
 	}
 	q->insert("DONE");
 	queueLIst.push_back(*q);
-	qList[p.id] = *q;
 	return NULL;	
 }
 
@@ -143,51 +138,44 @@ void* dispatcher(void* param){
 		}
 	}		
 	cout<<"finally out from dispatchor"<<endl;
-
 	return NULL;
 }
 
-//TODO: to see how insert queue size for each producer
 int main()
 {
 	cout<<"Start"<<endl;
 	pthread_t t[N];
+	//generae rabdom for queue sizes
+	random_device r;
+	mt19937 gen(r());
+	uniform_int_distribution<> dist(1,4);
 	//--------producers-------------
 	for(int i=0; i<N; i++){
-	// temp queue size generator--
-		random_device r;
-		mt19937 gen(r());
-		uniform_int_distribution<> dist(1,2);
-	//----------------------------
 		params p;
 		int* a = (int*)malloc(sizeof(int));
 		*a = i;
-		p.id = *a;
+		p.id = *a + 1;
 		p.numS = dist(gen);
 		pthread_create(&t[i],NULL,producer,&p);
 		sleep(0.5);
 	}
-	
 	//-------------------------------
+
 	//init dispatcher queues:
-	
 	pthread_t dispatch;
 	pthread_create(&dispatch,NULL,dispatcher,NULL);
 
-	pthread_join(dispatch,NULL);
-	for(int k=0; k<N; k++){
-		pthread_join(t[k],NULL);
-	}
-
-
-
-	//
 	for(int i=0;i<N;i++){
 		cout<<queueLIst.at(i).size()<<endl;
 		while(queueLIst.at(i).front() != "DONE"){
 			cout<<queueLIst.at(i).front()<<endl;
-
 			queueLIst.at(i).pop();
 		}		
 	}
+
+	for(int k=0; k<N; k++){
+		pthread_join(t[k],NULL);
+	}
+	pthread_join(dispatch,NULL);
+
 }
