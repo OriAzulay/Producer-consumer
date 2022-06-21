@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <vector>
 #include <semaphore.h>
+#include <random>
 
 using namespace std;
 /*global variables:*/
@@ -18,29 +19,23 @@ int N = 10;//queue capacity
 
 // This queue is FIFO : in ->>|4|3|2|1|-->out
 class Bounded_Buffer:public queue<string>{
-	sem_t* Sfull;
-	sem_t* Sempty;
-	
+	sem_t S;
 	mutex m;
 	size_t Qsize;
 	public:
 	Bounded_Buffer(size_t capacity){
 		this->Qsize = capacity;
-		//sem_init(Sfull,0,0);
-		//sem_init(Sempty,0,capacity);
+		sem_init(&S,0,capacity);
 	}
 	void insert(string s){
-		//sem_wait(Sempty);
+		sem_wait(&S);
 		m.lock();
-		//full
-		if(this->size() != this->Qsize){
-			queue::push(s);
+		queue::push(s);
 		m.unlock();
-		//sem_post(Sfull);
-		}
+		sem_post(&S);
 	}
 	string remove(){
-		//sem_wait(Sfull);
+		sem_wait(&S);
 		m.lock();
 		string firstObj = NULL;
 		if(!this->empty()){
@@ -48,7 +43,7 @@ class Bounded_Buffer:public queue<string>{
 			queue::pop();
 		}
 		m.unlock();
-		//sem_post(Sempty);
+		sem_post(&S);
 		return firstObj;
 	}
 	size_t getSize(){
@@ -63,17 +58,21 @@ struct params
 	int numS;
 };
 
-string createNews(int i){
+string createNews(){
 	string s;
-	switch (i % 3)
+	random_device r;
+	mt19937 gen(r());
+	uniform_int_distribution<> dist(1,3);
+
+	switch (dist(gen))
 	{
-	case 0:
+	case 1:
 		s = " NEWS ";
 		break;
-	case 1:
+	case 2:
 		s =  " SPORTS ";
 		break;
-	case 2: 
+	case 3: 
 		s = " WEATHER ";
 
 	}
@@ -85,14 +84,15 @@ void * producer(void* param){
 	//TODO : create string for Q here
 	params p = *(params*)param;
 	Bounded_Buffer* q = new Bounded_Buffer(N);
-	p.numS = 3;
 	mutex p_m;
-	for(int i=0; i<p.numS; i++){
+	
+	int i;
+	for(i=0; i<p.numS; i++){
+		string s = to_string(i);
 		p_m.lock();
-		string product = "producer " + to_string(p.id) + createNews(p.id) + to_string(i);
-		sleep(0.01);
-		q->insert(product);
+		string product = "producer " + to_string(p.id) + createNews() + s;
 		p_m.unlock();
+		q->insert(product);
 	}
 	q->insert("DONE");
 	queueLIst.push_back(*q);
@@ -104,18 +104,31 @@ int main()
 {
 	cout<<"Start"<<endl;
 	int N = 10; //size of producers
+	pthread_t t[N];
 	for(int i=0; i<N; i++){
+	// temp queue size generator------
+	random_device r;
+	mt19937 gen(r());
+	uniform_int_distribution<> dist(1,7);
+	//--------------------------------
 		params p;
 		int* a = (int*)malloc(sizeof(int));
 		*a = i;
 		p.id = *a;
-		pthread_t  t;
-		int temp = pthread_create(&t,NULL,producer,&p);
-	}
-	for(int i=0;i<queueLIst.size();i++){
-		for(int j=0; j<3; j++){
-			cout<<queueLIst[i].front()<<endl;
-		}
+		p.numS = dist(gen);
+		int temp = pthread_create(&t[i],NULL,producer,&p);
+		sleep(0.5);
 		
+	}
+	for(int k=0; k<N; k++){
+		pthread_join(t[k],NULL);
+	}
+	for(int i=0;i<N;i++){
+		cout<<queueLIst.at(i).size()<<endl;
+		while(queueLIst.at(i).front() != "DONE"){
+
+			cout<<queueLIst.at(i).front()<<endl;
+			queueLIst.at(i).pop();
+		}		
 	}
 }
