@@ -17,7 +17,7 @@ using namespace std;
 /*global variables:*/
 vector<queue<string>> queueLIst;//queue array
 int N = 3;//queue capacity
-//vector<queue<string>> sortedP;
+//global unbounded queue (implement unboubded inide despetcher & unBounded_BUffer class)
 queue<string> sportQ;
 queue<string> newsQ;
 queue<string> wheaterQ;
@@ -135,6 +135,8 @@ void* producer(void* param){
 void* dispatcher(void* param){
 	vector<queue<string>> copyQ = queueLIst;
 	mutex m;
+	sem_t s;
+	sem_init(&s,0,N);
 	while(!copyQ.empty()){
 		vector<queue<string>>::iterator it = copyQ.begin();
 		for(it; it != copyQ.end() ; it++){
@@ -162,7 +164,9 @@ void* dispatcher(void* param){
 				default: 
 					break;
 				}
+				sem_wait(&s);
 				(*it).pop();
+				sem_post(&s);
 			}else{
 				copyQ.erase(it);
 			}
@@ -171,6 +175,34 @@ void* dispatcher(void* param){
 	cout<<"finally out from dispatchor"<<endl;
 	return NULL;
 }
+
+void* CoEditor(void* param){
+	Bounded_Buffer* screen = new Bounded_Buffer(N);
+	queue<string> sportQtemp = sportQ;
+	queue<string> newsQtemp = newsQ;
+	queue<string> wheaterQtemp = wheaterQ;
+	int p = *(int*)param;
+	switch (p)
+	{
+	case 1:
+		screen->insert(sportQtemp.front());
+		sportQtemp.pop();
+		break;
+	case 2:
+		screen->insert(newsQtemp.front());
+		newsQtemp.pop();
+		break;
+	case 3:
+		screen->insert(wheaterQtemp.front());
+		wheaterQtemp.pop();
+		break;
+	default:
+		break;
+	}
+	return NULL;
+}
+
+
 
 int main()
 {
@@ -196,6 +228,7 @@ int main()
 	pthread_t dispatch;
 	pthread_create(&dispatch,NULL,dispatcher,NULL);
 
+	//TEST PRINTS
 	for(int i=0;i<N;i++){
 		cout<<queueLIst.at(i).size()<<endl;
 		while(queueLIst.at(i).front() != "DONE"){
@@ -204,9 +237,21 @@ int main()
 		}		
 	}
 
+	pthread_t coEdit[3];
+	for(int i=0; i<3; i++){
+		int* a = (int*)malloc(sizeof(int));
+		*a = i;
+		pthread_create(&coEdit[i],NULL,producer,&a);
+	}
+	
+
+
 	for(int k=0; k<N; k++){
 		pthread_join(t[k],NULL);
 	}
 	pthread_join(dispatch,NULL);
+	for(int k=0; k<3; k++){
+		pthread_join(coEdit[k],NULL);
+	}
 
 }
