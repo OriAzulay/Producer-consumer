@@ -55,6 +55,36 @@ class Bounded_Buffer:public queue<string>{
 		return Qsize;
 	}
 };
+class UnBounded_Buffer:public queue<string>{
+	sem_t S;
+	mutex m;
+	size_t Qsize;
+	public:
+	UnBounded_Buffer(size_t capacity){
+		this->Qsize = capacity;
+		sem_init(&S,0,capacity);
+	}
+	void insert(string s){
+		m.lock();
+		queue::push(s);
+		m.unlock();
+	}
+	string remove(){
+		sem_wait(&S);
+		m.lock();
+		string firstObj = NULL;
+		if(!this->empty()){
+			firstObj = queue::front();
+			queue::pop();
+		}
+		m.unlock();
+		sem_post(&S);
+		return firstObj;
+	}
+	size_t getSize(){
+		return Qsize;
+	}
+};
 
 struct params
 {
@@ -104,6 +134,7 @@ void* producer(void* param){
 
 void* dispatcher(void* param){
 	vector<queue<string>> copyQ = queueLIst;
+	mutex m;
 	while(!copyQ.empty()){
 		vector<queue<string>>::iterator it = copyQ.begin();
 		for(it; it != copyQ.end() ; it++){
