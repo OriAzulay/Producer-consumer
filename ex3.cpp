@@ -92,7 +92,11 @@ struct params
 	string type;
 	int numS;
 };
-
+struct coEditParam
+	{
+		Bounded_Buffer* screen = new Bounded_Buffer(N);
+		int i;
+	};
 string createNews(){
 	string s;
 	random_device r;
@@ -126,6 +130,7 @@ void* producer(void* param){
 		string product = "producer " + to_string(p.id) + createNews() + s;
 		p_m.unlock();
 		q->insert(product);
+		sleep(0.1);
 	}
 	q->insert("DONE");
 	queueLIst.push_back(*q);
@@ -148,23 +153,21 @@ void* dispatcher(void* param){
 				{
 				case 'S':
 					sportQ.push((*it).front());
-					//sortedP.at(0).push();
-					cout<<"SPORT Inserted to the 'S dispatcher queue' \n";
+					cout<<"SPORT Inserted to the 'S dispatcher queue' \n";//not sure if mendatory
 					break;
 				case 'N':
 					newsQ.push((*it).front());
-					//sortedP.at(0).push(it.front());
-					cout<<"NEWS Inserted to the 'N dispatcher queue' \n";
+					cout<<"NEWS Inserted to the 'N dispatcher queue' \n";//not sure if mendatory
 					break;
 				case 'W':
 					wheaterQ.push((*it).front());
-					//sortedP.at(0).push(it.front());
-					cout<<"WHEATER Inserted to the 'W dispatcher queue' \n";
+					cout<<"WHEATER Inserted to the 'W dispatcher queue' \n";//not sure if mendatory
 					break;
 				default: 
 					break;
 				}
-				sem_wait(&s);
+				// for bounded queue
+				sem_wait(&s); 
 				(*it).pop();
 				sem_post(&s);
 			}else{
@@ -172,29 +175,34 @@ void* dispatcher(void* param){
 			}
 		}
 	}		
-	cout<<"finally out from dispatchor"<<endl;
 	return NULL;
 }
 
 void* CoEditor(void* param){
-	Bounded_Buffer* screen = new Bounded_Buffer(N);
 	queue<string> sportQtemp = sportQ;
 	queue<string> newsQtemp = newsQ;
 	queue<string> wheaterQtemp = wheaterQ;
-	int p = *(int*)param;
-	switch (p)
+	coEditParam p = *(coEditParam*)param;
+	switch (p.i)
 	{
 	case 1:
-		screen->insert(sportQtemp.front());
-		sportQtemp.pop();
+		for(int i=0;i<sportQ.size(); i++){
+			p.screen->insert(sportQtemp.front());
+			sportQtemp.pop();
+		}
+		
 		break;
 	case 2:
-		screen->insert(newsQtemp.front());
-		newsQtemp.pop();
+		for(int i=0;i<newsQ.size(); i++){
+			p.screen->insert(newsQtemp.front());
+			newsQtemp.pop();
+		}
 		break;
 	case 3:
-		screen->insert(wheaterQtemp.front());
-		wheaterQtemp.pop();
+		for(int i=0;i<wheaterQ.size(); i++){
+			p.screen->insert(wheaterQtemp.front());
+			wheaterQtemp.pop();
+		}
 		break;
 	default:
 		break;
@@ -220,38 +228,40 @@ int main()
 		p.id = *a + 1;
 		p.numS = dist(gen);
 		pthread_create(&t[i],NULL,producer,&p);
-		sleep(0.5);
+		
 	}
 	//-------------------------------
 
 	//init dispatcher queues:
 	pthread_t dispatch;
 	pthread_create(&dispatch,NULL,dispatcher,NULL);
-
-	//TEST PRINTS
-	for(int i=0;i<N;i++){
-		cout<<queueLIst.at(i).size()<<endl;
-		while(queueLIst.at(i).front() != "DONE"){
-			cout<<queueLIst.at(i).front()<<endl;
-			queueLIst.at(i).pop();
-		}		
-	}
-
+	//init coEditor :
 	pthread_t coEdit[3];
+	coEditParam p;
 	for(int i=0; i<3; i++){
 		int* a = (int*)malloc(sizeof(int));
 		*a = i;
-		pthread_create(&coEdit[i],NULL,producer,&a);
+		p.i = *a;
+		pthread_create(&coEdit[i],NULL,CoEditor,&p);
 	}
-	
-
 
 	for(int k=0; k<N; k++){
 		pthread_join(t[k],NULL);
 	}
 	pthread_join(dispatch,NULL);
+
 	for(int k=0; k<3; k++){
 		pthread_join(coEdit[k],NULL);
 	}
-
+	
+//TEST PRINTS
+	for(int i=0;i<N;i++){
+		cout<<queueLIst.at(i).size()<<endl;
+		while(queueLIst.at(i).front() != "DONE"){
+			cout<<queueLIst.at(i).front()<<endl;
+			queueLIst.at(i).pop();
+			cout<<"coEditor is: "<<p.screen->remove();
+			
+		}		
+	}
 }
