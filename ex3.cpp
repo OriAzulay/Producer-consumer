@@ -1,4 +1,6 @@
 //Ori Azulay 206336794
+// based on configuration file (txt), that is numbers only
+//(option 2 in the assignment file)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,11 +14,12 @@
 #include <semaphore.h>
 #include <random>
 #include <iterator>
+#include <sstream>
 
 using namespace std;
 /*global variables:*/
 vector<queue<string>> queueLIst;//queue array
-int N = 3;//queue capacity
+int N = 10;//queue capacity
 //global unbounded queue (implement unboubded inide despetcher & unBounded_BUffer class)
 queue<string> sportQ;
 queue<string> newsQ;
@@ -31,6 +34,7 @@ class Bounded_Buffer:public queue<string>{
 	Bounded_Buffer(size_t capacity){
 		this->Qsize = capacity;
 		sem_init(&S,0,capacity);
+
 	}
 	void insert(string s){
 		sem_wait(&S);
@@ -42,7 +46,7 @@ class Bounded_Buffer:public queue<string>{
 	string remove(){
 		sem_wait(&S);
 		m.lock();
-		string firstObj = NULL;
+		string firstObj;
 		if(!this->empty()){
 			firstObj = queue::front();
 			queue::pop();
@@ -88,9 +92,10 @@ class UnBounded_Buffer:public queue<string>{
 
 struct params
 {
-	int id;
-	string type;
-	int numS;
+	int id; //producer id
+	string type; // type
+	int numS; // number of products inside producer
+	int qSize; //producer queue size
 };
 struct coEditParam
 	{
@@ -121,7 +126,7 @@ string createNews(){
 
 void* producer(void* param){
 	params p = *(params*)param;
-	Bounded_Buffer* q = new Bounded_Buffer(N);
+	Bounded_Buffer* q = new Bounded_Buffer(p.qSize);
 	mutex p_m;
 	int i;
 	for(i=0; i<p.numS; i++){
@@ -138,6 +143,7 @@ void* producer(void* param){
 }
 
 void* dispatcher(void* param){
+	//copy queue for iterate and delete
 	vector<queue<string>> copyQ = queueLIst;
 	mutex m;
 	sem_t s;
@@ -149,19 +155,35 @@ void* dispatcher(void* param){
 				break;
 			}
 			if(!(*it).empty()){
-				switch ((*it).front()[11])
+				if((*it).front() != "DONE"){ //avoid reaching to null at [11] index
+					switch ((*it).front()[11]) //index of N(in NEWS),S(in SPORTS) or W(in WHEATER)
 				{
 				case 'S':
+				sleep(0.1);
+					sem_wait(&s);
+					m.lock();
 					sportQ.push((*it).front());
 					cout<<"SPORT Inserted to the 'S dispatcher queue' \n";//not sure if mendatory
+					m.unlock();
+					sem_post(&s);
 					break;
 				case 'N':
+				sleep(0.1);
+					sem_wait(&s);
+					m.lock();
 					newsQ.push((*it).front());
 					cout<<"NEWS Inserted to the 'N dispatcher queue' \n";//not sure if mendatory
+					m.unlock();
+					sem_post(&s);
 					break;
 				case 'W':
+				sleep(0.1);
+					sem_wait(&s);
+					m.lock();
 					wheaterQ.push((*it).front());
 					cout<<"WHEATER Inserted to the 'W dispatcher queue' \n";//not sure if mendatory
+					m.unlock();
+					sem_post(&s);
 					break;
 				default: 
 					break;
@@ -170,11 +192,20 @@ void* dispatcher(void* param){
 				sem_wait(&s); 
 				(*it).pop();
 				sem_post(&s);
+				}else{
+					sem_wait(&s); 
+					(*it).pop();
+					sem_post(&s);
+					break;
+				}
 			}else{
 				copyQ.erase(it);
 			}
 		}
-	}		
+	}
+	sportQ.push("DONE");
+	newsQ.push("DONE");
+	wheaterQ.push("DONE");		
 	return NULL;
 }
 
@@ -183,14 +214,14 @@ void* CoEditor(void* param){
 	queue<string> newsQtemp = newsQ;
 	queue<string> wheaterQtemp = wheaterQ;
 	coEditParam p = *(coEditParam*)param;
-	switch (p.i)
+	// case of spors, wheater or news
+ 	switch (p.i)
 	{
 	case 1:
 		for(int i=0;i<sportQ.size(); i++){
 			p.screen->insert(sportQtemp.front());
 			sportQtemp.pop();
 		}
-		
 		break;
 	case 2:
 		for(int i=0;i<newsQ.size(); i++){
@@ -212,9 +243,17 @@ void* CoEditor(void* param){
 
 
 
-int main()
+int main(int argc, char* argv[])
 {
-	cout<<"Start"<<endl;
+	/*
+	Unfortunately, I was unable to set variables for the configuration file
+	Then the code will work with encoded numbers
+	(I submitted the assignment late (22.6) due to reserve at the army and relocation)
+	i would like your considuration ,please.
+
+	N = number of producers
+	dist - Create a random queue size for each producer
+	 */
 	pthread_t t[N];
 	//generae rabdom for queue sizes
 	random_device r;
@@ -222,46 +261,49 @@ int main()
 	uniform_int_distribution<> dist(1,4);
 	//--------producers-------------
 	for(int i=0; i<N; i++){
-		params p;
+		params p; // parameters for producers - id, type, queue size 
 		int* a = (int*)malloc(sizeof(int));
 		*a = i;
 		p.id = *a + 1;
 		p.numS = dist(gen);
-		pthread_create(&t[i],NULL,producer,&p);
-		
+		p.qSize = p.numS;
+		int th1 = pthread_create(&t[i],NULL,producer,&p);
+		sleep(0.5);
 	}
 	//-------------------------------
 
 	//init dispatcher queues:
 	pthread_t dispatch;
-	pthread_create(&dispatch,NULL,dispatcher,NULL);
+	int th2 = pthread_create(&dispatch,NULL,dispatcher,NULL);
 	//init coEditor :
 	pthread_t coEdit[3];
-	coEditParam p;
-	for(int i=0; i<3; i++){
+	coEditParam p; //parameters for coEditor : id (1,2,3) and bounded queue
+	int tempScreenSIze = 50;
+	Bounded_Buffer* screenMAnager = new Bounded_Buffer(tempScreenSIze);
+	for(int i=0; i<=3; i++){
 		int* a = (int*)malloc(sizeof(int));
 		*a = i;
 		p.i = *a;
-		pthread_create(&coEdit[i],NULL,CoEditor,&p);
+		p.screen = screenMAnager;
+		int th3 = pthread_create(&coEdit[i],NULL,CoEditor,&p);
 	}
-
+	//JOIN
 	for(int k=0; k<N; k++){
-		pthread_join(t[k],NULL);
-	}
-	pthread_join(dispatch,NULL);
+			pthread_join(t[k],NULL);
+		}
+		pthread_join(dispatch,NULL);
 
-	for(int k=0; k<3; k++){
-		pthread_join(coEdit[k],NULL);
-	}
+		for(int k=0; k<3; k++){
+			pthread_join(coEdit[k],NULL);
+		}
 	
-//TEST PRINTS
-	for(int i=0;i<N;i++){
-		cout<<queueLIst.at(i).size()<<endl;
-		while(queueLIst.at(i).front() != "DONE"){
-			cout<<queueLIst.at(i).front()<<endl;
-			queueLIst.at(i).pop();
-			cout<<"coEditor is: "<<p.screen->remove();
-			
-		}		
+	//Sycreen manager
+	for(int i=0;i<5*N;i++){
+		while(!p.screen->empty()){
+			cout<<p.screen->remove()<<endl;
+			sleep(1.3);
+		}
 	}
+	cout<<"screen manager DONE";
+	
 }
